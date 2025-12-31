@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, X, MapPin, Maximize2 } from 'lucide-react';
-import { Loader } from '@googlemaps/js-api-loader';
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 import { MeasurementOverlay } from './MeasurementOverlay';
 import { NorthArrow } from './NorthArrow';
 import type { Unit } from '../utils/geospatial';
@@ -36,16 +36,16 @@ export function MapContainer({ address }: MapContainerProps) {
       try {
         const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-        const loader = new Loader({
+        setOptions({
           apiKey,
           version: 'weekly',
-          libraries: ['places', 'geocoding', 'marker', 'geometry'],
         });
 
-        await loader.load();
+        const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
+        const { Geocoder } = await importLibrary('geocoding') as google.maps.GeocodingLibrary;
 
         if (mapRef.current && !mapInstanceRef.current) {
-          mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+          mapInstanceRef.current = new Map(mapRef.current, {
             center: { lat: 37.7749, lng: -122.4194 },
             zoom: 12,
             tilt: 0,
@@ -63,7 +63,7 @@ export function MapContainer({ address }: MapContainerProps) {
             },
           });
 
-          geocoderRef.current = new google.maps.Geocoder();
+          geocoderRef.current = new Geocoder();
           setIsLoading(false);
         }
       } catch (err) {
@@ -93,7 +93,8 @@ export function MapContainer({ address }: MapContainerProps) {
             setHasMarker(false);
           }
 
-          markerRef.current = new google.maps.Marker({
+          const { Marker } = await importLibrary('marker') as google.maps.MarkerLibrary;
+          markerRef.current = new Marker({
             position: location,
             map: mapInstanceRef.current,
             title: address,

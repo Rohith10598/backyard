@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { Search } from 'lucide-react';
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 
 interface Prediction {
   description: string;
@@ -20,25 +21,25 @@ export function AddressInput({ onSearch }: AddressInputProps) {
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
 
   useEffect(() => {
-    const initializeAutocomplete = () => {
+    const initializeAutocomplete = async () => {
       try {
-        if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-          autocompleteRef.current = new google.maps.places.AutocompleteService();
-          sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
-        }
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+        setOptions({
+          apiKey,
+          version: 'weekly',
+        });
+
+        const { AutocompleteService, AutocompleteSessionToken } = await importLibrary('places') as google.maps.PlacesLibrary;
+
+        autocompleteRef.current = new AutocompleteService();
+        sessionTokenRef.current = new AutocompleteSessionToken();
       } catch (error) {
         console.error('Failed to initialize autocomplete:', error);
       }
     };
 
-    const checkGoogleMaps = setInterval(() => {
-      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-        initializeAutocomplete();
-        clearInterval(checkGoogleMaps);
-      }
-    }, 100);
-
-    return () => clearInterval(checkGoogleMaps);
+    initializeAutocomplete();
   }, []);
 
   const fetchSuggestions = async (value: string) => {
@@ -69,13 +70,19 @@ export function AddressInput({ onSearch }: AddressInputProps) {
     setIsOpen(true);
   };
 
-  const handleSuggestionClick = (suggestion: Prediction) => {
+  const handleSuggestionClick = async (suggestion: Prediction) => {
     setInputValue(suggestion.description);
     setSuggestions([]);
     setIsOpen(false);
     setActiveSuggestion(-1);
     onSearch(suggestion.description);
-    sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+
+    try {
+      const { AutocompleteSessionToken } = await importLibrary('places') as google.maps.PlacesLibrary;
+      sessionTokenRef.current = new AutocompleteSessionToken();
+    } catch (error) {
+      console.error('Failed to create new session token:', error);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -112,14 +119,20 @@ export function AddressInput({ onSearch }: AddressInputProps) {
     }
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmedValue = inputValue.trim();
     if (trimmedValue) {
       onSearch(trimmedValue);
       setSuggestions([]);
       setIsOpen(false);
-      sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+
+      try {
+        const { AutocompleteSessionToken } = await importLibrary('places') as google.maps.PlacesLibrary;
+        sessionTokenRef.current = new AutocompleteSessionToken();
+      } catch (error) {
+        console.error('Failed to create new session token:', error);
+      }
     }
   };
 
