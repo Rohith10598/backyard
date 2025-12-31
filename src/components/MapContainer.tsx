@@ -70,10 +70,14 @@ export function MapContainer({ address }: MapContainerProps) {
     if (!script) {
       const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
       const googleScript = document.createElement('script');
-      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry`;
+      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async`;
       googleScript.async = true;
       googleScript.defer = true;
-      googleScript.onload = initMap;
+      googleScript.onload = () => {
+        if (typeof google !== 'undefined') {
+          initMap();
+        }
+      };
       googleScript.onerror = () => {
         setError('Failed to load Google Maps. Please check your API key.');
         setIsLoading(false);
@@ -82,7 +86,11 @@ export function MapContainer({ address }: MapContainerProps) {
     } else if (typeof google !== 'undefined') {
       initMap();
     } else {
-      script.addEventListener('load', initMap);
+      script.addEventListener('load', () => {
+        if (typeof google !== 'undefined') {
+          initMap();
+        }
+      });
     }
   }, []);
 
