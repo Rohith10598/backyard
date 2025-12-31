@@ -79,8 +79,10 @@ export function MapContainer({ address }: MapContainerProps) {
         setIsLoading(false);
       };
       document.head.appendChild(googleScript);
-    } else {
+    } else if (typeof google !== 'undefined') {
       initMap();
+    } else {
+      script.addEventListener('load', initMap);
     }
   }, []);
 
