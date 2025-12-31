@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, X, MapPin, Maximize2 } from 'lucide-react';
-import { PolygonDrawer } from './PolygonDrawer';
+import { Loader } from '@googlemaps/js-api-loader';
 import { MeasurementOverlay } from './MeasurementOverlay';
 import { NorthArrow } from './NorthArrow';
 import type { Unit } from '../utils/geospatial';
@@ -34,11 +34,18 @@ export function MapContainer({ address }: MapContainerProps) {
   useEffect(() => {
     const initMap = async () => {
       try {
-        const { Map } = await google.maps.importLibrary('maps') as typeof google.maps;
-        const { Geocoder } = await google.maps.importLibrary('geocoding') as typeof google.maps;
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+        const loader = new Loader({
+          apiKey,
+          version: 'weekly',
+          libraries: ['places', 'geocoding', 'marker', 'geometry'],
+        });
+
+        await loader.load();
 
         if (mapRef.current && !mapInstanceRef.current) {
-          mapInstanceRef.current = new Map(mapRef.current, {
+          mapInstanceRef.current = new google.maps.Map(mapRef.current, {
             center: { lat: 37.7749, lng: -122.4194 },
             zoom: 12,
             tilt: 0,
@@ -56,7 +63,7 @@ export function MapContainer({ address }: MapContainerProps) {
             },
           });
 
-          geocoderRef.current = new Geocoder();
+          geocoderRef.current = new google.maps.Geocoder();
           setIsLoading(false);
         }
       } catch (err) {
@@ -66,32 +73,7 @@ export function MapContainer({ address }: MapContainerProps) {
       }
     };
 
-    const script = document.querySelector('script[src*="maps.googleapis.com"]');
-    if (!script) {
-      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-      const googleScript = document.createElement('script');
-      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async`;
-      googleScript.async = true;
-      googleScript.defer = true;
-      googleScript.onload = () => {
-        if (typeof google !== 'undefined') {
-          initMap();
-        }
-      };
-      googleScript.onerror = () => {
-        setError('Failed to load Google Maps. Please check your API key.');
-        setIsLoading(false);
-      };
-      document.head.appendChild(googleScript);
-    } else if (typeof google !== 'undefined') {
-      initMap();
-    } else {
-      script.addEventListener('load', () => {
-        if (typeof google !== 'undefined') {
-          initMap();
-        }
-      });
-    }
+    initMap();
   }, []);
 
   useEffect(() => {
@@ -111,17 +93,12 @@ export function MapContainer({ address }: MapContainerProps) {
             setHasMarker(false);
           }
 
-          try {
-            const { Marker } = await google.maps.importLibrary('marker') as typeof google.maps;
-            markerRef.current = new Marker({
-              position: location,
-              map: mapInstanceRef.current,
-              title: address,
-            });
-            setHasMarker(true);
-          } catch (err) {
-            console.error('Error loading Marker library:', err);
-          }
+          markerRef.current = new google.maps.Marker({
+            position: location,
+            map: mapInstanceRef.current,
+            title: address,
+          });
+          setHasMarker(true);
         } else if (status === 'ZERO_RESULTS') {
           setError('Address not found. Please try another.');
         } else {

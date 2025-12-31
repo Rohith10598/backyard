@@ -20,18 +20,19 @@ export function AddressInput({ onSearch }: AddressInputProps) {
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
 
   useEffect(() => {
-    const initializeAutocomplete = async () => {
+    const initializeAutocomplete = () => {
       try {
-        await google.maps.importLibrary('places');
-        autocompleteRef.current = new google.maps.places.AutocompleteService();
-        sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+        if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+          autocompleteRef.current = new google.maps.places.AutocompleteService();
+          sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+        }
       } catch (error) {
         console.error('Failed to initialize autocomplete:', error);
       }
     };
 
     const checkGoogleMaps = setInterval(() => {
-      if (typeof google !== 'undefined' && google.maps) {
+      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
         initializeAutocomplete();
         clearInterval(checkGoogleMaps);
       }
