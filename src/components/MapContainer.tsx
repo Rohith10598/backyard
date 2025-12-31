@@ -328,6 +328,11 @@ export function MapContainer({ address }: MapContainerProps) {
       polygonRef.current.map = null;
       polygonRef.current = null;
     }
+
+    if (markerRef.current) {
+      markerRef.current.setMap(null);
+      markerRef.current = null;
+    }
   };
 
   if (isLoading) {
