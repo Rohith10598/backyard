@@ -21,6 +21,7 @@ export function MapContainer({ address }: MapContainerProps) {
   const [vertices, setVertices] = useState<Array<{ lat: number; lng: number; id: string }>>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [draggedVertex, setDraggedVertex] = useState<string | null>(null);
+  const [hasMarker, setHasMarker] = useState(false);
   const [measurements, setMeasurements] = useState<{
     perimeter: number;
     area: number;
@@ -97,6 +98,7 @@ export function MapContainer({ address }: MapContainerProps) {
 
           if (markerRef.current) {
             markerRef.current.setMap(null);
+            setHasMarker(false);
           }
 
           try {
@@ -106,6 +108,7 @@ export function MapContainer({ address }: MapContainerProps) {
               map: mapInstanceRef.current,
               title: address,
             });
+            setHasMarker(true);
           } catch (err) {
             console.error('Error loading Marker library:', err);
           }
@@ -332,6 +335,7 @@ export function MapContainer({ address }: MapContainerProps) {
     if (markerRef.current) {
       markerRef.current.setMap(null);
       markerRef.current = null;
+      setHasMarker(false);
     }
   };
 
@@ -351,13 +355,24 @@ export function MapContainer({ address }: MapContainerProps) {
 
       <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-xl p-2 z-10">
         {!showPolygonUI ? (
-          <button
-            onClick={() => setShowPolygonUI(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <MapPin size={18} />
-            Draw Polygon
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setShowPolygonUI(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <MapPin size={18} />
+              Draw Polygon
+            </button>
+            {(vertices.length > 0 || hasMarker) && (
+              <button
+                onClick={clearPolygon}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <X size={18} />
+                Clear
+              </button>
+            )}
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {!isDrawing ? (
@@ -385,7 +400,7 @@ export function MapContainer({ address }: MapContainerProps) {
               </>
             )}
 
-            {vertices.length > 0 && (
+            {(vertices.length > 0 || hasMarker) && (
               <button
                 onClick={clearPolygon}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
