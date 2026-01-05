@@ -31,56 +31,79 @@ export function MapContainer({ address }: MapContainerProps) {
   const markerRefsRef = useRef<Map<string, google.maps.Marker>>(new Map());
 
   useEffect(() => {
-    const initMap = async () => {
+    const initializeMap = async () => {
       try {
+        if (!mapRef.current) {
+          setError('Map container not found');
+          setIsLoading(false);
+          return;
+        }
+
         const { Map } = await google.maps.importLibrary('maps') as typeof google.maps;
         const { Geocoder } = await google.maps.importLibrary('geocoding') as typeof google.maps;
 
-        if (mapRef.current && !mapInstanceRef.current) {
-          mapInstanceRef.current = new Map(mapRef.current, {
-            center: { lat: 37.7749, lng: -122.4194 },
-            zoom: 12,
-            tilt: 0,
-            mapTypeId: 'satellite',
-            mapTypeControl: true,
-            mapTypeControlOptions: {
-              style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-              position: google.maps.ControlPosition.TOP_RIGHT,
-            },
-            streetViewControl: false,
-            fullscreenControl: true,
-            zoomControl: true,
-            zoomControlOptions: {
-              position: google.maps.ControlPosition.RIGHT_CENTER,
-            },
-          });
+        mapInstanceRef.current = new Map(mapRef.current, {
+          center: { lat: 37.7749, lng: -122.4194 },
+          zoom: 12,
+          tilt: 0,
+          mapTypeId: 'satellite',
+          mapTypeControl: true,
+          mapTypeControlOptions: {
+            style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: google.maps.ControlPosition.TOP_RIGHT,
+          },
+          streetViewControl: false,
+          fullscreenControl: true,
+          zoomControl: true,
+          zoomControlOptions: {
+            position: google.maps.ControlPosition.RIGHT_CENTER,
+          },
+        });
 
-          geocoderRef.current = new Geocoder();
-          setIsLoading(false);
-        }
+        geocoderRef.current = new Geocoder();
+        setIsLoading(false);
       } catch (err) {
-        console.error('Error loading Google Maps:', err);
-        setError('Failed to load Google Maps. Please check your API key.');
+        console.error('Error initializing map:', err);
+        setError('Failed to initialize Google Maps.');
         setIsLoading(false);
       }
     };
 
-    const script = document.querySelector('script[src*="maps.googleapis.com"]');
-    if (!script) {
-      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-      const googleScript = document.createElement('script');
-      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry`;
-      googleScript.async = true;
-      googleScript.defer = true;
-      googleScript.onload = initMap;
-      googleScript.onerror = () => {
-        setError('Failed to load Google Maps. Please check your API key.');
-        setIsLoading(false);
-      };
-      document.head.appendChild(googleScript);
-    } else {
-      initMap();
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+    if (!apiKey) {
+      setError('Google Maps API key is missing.');
+      setIsLoading(false);
+      return;
     }
+
+    if (window.google?.maps) {
+      initializeMap();
+      return;
+    }
+
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', initializeMap, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry`;
+    script.async = true;
+
+    const handleScriptLoad = () => {
+      initializeMap();
+    };
+
+    script.addEventListener('load', handleScriptLoad, { once: true });
+    script.addEventListener('error', () => {
+      console.error('Failed to load Google Maps script');
+      setError('Failed to load Google Maps. Please check your API key.');
+      setIsLoading(false);
+    }, { once: true });
+
+    document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
@@ -194,7 +217,7 @@ export function MapContainer({ address }: MapContainerProps) {
       }
     }
 
-    markerRefsRef.current.forEach((marker) => marker.map = null);
+    markerRefsRef.current.forEach((marker) => marker.setMap(null));
     markerRefsRef.current.clear();
 
     vertices.forEach((vertex) => {
@@ -289,12 +312,12 @@ export function MapContainer({ address }: MapContainerProps) {
     const path = vertices.map((v) => ({ lat: v.lat, lng: v.lng }));
 
     if (polylineRef.current) {
-      polylineRef.current.map = null;
+      polylineRef.current.setMap(null);
       polylineRef.current = null;
     }
 
     if (polygonRef.current) {
-      polygonRef.current.map = null;
+      polygonRef.current.setMap(null);
     }
 
     polygonRef.current = new google.maps.Polygon({
@@ -316,31 +339,34 @@ export function MapContainer({ address }: MapContainerProps) {
     setDraggedVertex(null);
     setMeasurements(null);
 
-    markerRefsRef.current.forEach((marker) => marker.map = null);
+    markerRefsRef.current.forEach((marker) => marker.setMap(null));
     markerRefsRef.current.clear();
 
+    if (markerRef.current) {
+      markerRef.current.setMap(null);
+      markerRef.current = null;
+    }
+
     if (polylineRef.current) {
-      polylineRef.current.map = null;
+      polylineRef.current.setMap(null);
       polylineRef.current = null;
     }
 
     if (polygonRef.current) {
-      polygonRef.current.map = null;
+      polygonRef.current.setMap(null);
       polygonRef.current = null;
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-900">
-        <div className="text-white text-lg">Loading map...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapRef} className="w-full h-full" />
+    <div className="relative w-full h-full flex flex-col">
+      <div ref={mapRef} className="flex-1 w-full bg-gray-800" style={{ minHeight: '100%' }} />
+
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50 z-50">
+          <div className="text-white text-lg">Loading map...</div>
+        </div>
+      )}
 
       <NorthArrow mapInstance={mapInstanceRef.current} />
 
@@ -380,15 +406,13 @@ export function MapContainer({ address }: MapContainerProps) {
               </>
             )}
 
-            {vertices.length > 0 && (
-              <button
-                onClick={clearPolygon}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <X size={18} />
-                Clear
-              </button>
-            )}
+            <button
+              onClick={clearPolygon}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <X size={18} />
+              Clear All
+            </button>
 
             <button
               onClick={() => setShowPolygonUI(false)}
