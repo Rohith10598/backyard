@@ -33,8 +33,6 @@ export function MapContainer({ address }: MapContainerProps) {
   useEffect(() => {
     const initializeMap = async () => {
       try {
-<<<<<<< HEAD
-<<<<<<< HEAD
         if (!mapRef.current) {
           setError('Map container not found');
           setIsLoading(false);
@@ -43,21 +41,6 @@ export function MapContainer({ address }: MapContainerProps) {
 
         const { Map } = await google.maps.importLibrary('maps') as typeof google.maps;
         const { Geocoder } = await google.maps.importLibrary('geocoding') as typeof google.maps;
-=======
-        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-        setOptions({
-          apiKey,
-          version: 'weekly',
-        });
-
-        const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
-        const { Geocoder } = await importLibrary('geocoding') as google.maps.GeocodingLibrary;
->>>>>>> 622647673e61175711c18bf1b68c9f16896f40fe
-=======
-        const { Map } = await google.maps.importLibrary('maps') as typeof google.maps;
-        const { Geocoder } = await google.maps.importLibrary('geocoding') as typeof google.maps;
->>>>>>> 8557b7fed6a40b4dc4d49e15caa404e00cb043c3
 
         mapInstanceRef.current = new Map(mapRef.current, {
           center: { lat: 37.7749, lng: -122.4194 },
@@ -86,8 +69,6 @@ export function MapContainer({ address }: MapContainerProps) {
       }
     };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
@@ -123,27 +104,6 @@ export function MapContainer({ address }: MapContainerProps) {
     }, { once: true });
 
     document.head.appendChild(script);
-=======
-    initMap();
->>>>>>> 622647673e61175711c18bf1b68c9f16896f40fe
-=======
-    const script = document.querySelector('script[src*="maps.googleapis.com"]');
-    if (!script) {
-      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-      const googleScript = document.createElement('script');
-      googleScript.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry`;
-      googleScript.async = true;
-      googleScript.defer = true;
-      googleScript.onload = initMap;
-      googleScript.onerror = () => {
-        setError('Failed to load Google Maps. Please check your API key.');
-        setIsLoading(false);
-      };
-      document.head.appendChild(googleScript);
-    } else {
-      initMap();
-    }
->>>>>>> 8557b7fed6a40b4dc4d49e15caa404e00cb043c3
   }, []);
 
   useEffect(() => {
@@ -446,8 +406,6 @@ export function MapContainer({ address }: MapContainerProps) {
               </>
             )}
 
-<<<<<<< HEAD
-<<<<<<< HEAD
             <button
               onClick={clearPolygon}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -455,20 +413,6 @@ export function MapContainer({ address }: MapContainerProps) {
               <X size={18} />
               Clear All
             </button>
-=======
-            {(vertices.length > 0 || hasMarker) && (
-=======
-            {vertices.length > 0 && (
->>>>>>> 8557b7fed6a40b4dc4d49e15caa404e00cb043c3
-              <button
-                onClick={clearPolygon}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <X size={18} />
-                Clear
-              </button>
-            )}
->>>>>>> 622647673e61175711c18bf1b68c9f16896f40fe
 
             <button
               onClick={() => setShowPolygonUI(false)}
