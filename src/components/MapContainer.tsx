@@ -3,7 +3,13 @@ import { Plus, X, MapPin, Maximize2 } from 'lucide-react';
 import { PolygonDrawer } from './PolygonDrawer';
 import { MeasurementOverlay } from './MeasurementOverlay';
 import { NorthArrow } from './NorthArrow';
+import { SnapTools } from './SnapTools';
+import { SnapIndicator } from './SnapIndicator';
+import { GridOverlay } from './GridOverlay';
+import { GridControls } from './GridControls';
 import type { Unit } from '../utils/geospatial';
+import type { SnapConfig, SnapPoint } from '../utils/snapping';
+import { applySnapping } from '../utils/snapping';
 
 interface MapContainerProps {
   address: string;
@@ -26,6 +32,16 @@ export function MapContainer({ address }: MapContainerProps) {
     area: number;
     sideLengths: number[];
   } | null>(null);
+  const [snapConfig, setSnapConfig] = useState<SnapConfig>({
+    enabled: false,
+    distanceThreshold: 10,
+    angleSnapping: true,
+    gridSnapping: false,
+    vertexSnapping: true,
+  });
+  const [snapPoint, setSnapPoint] = useState<SnapPoint | null>(null);
+  const [gridVisible, setGridVisible] = useState(false);
+  const [gridSpacing, setGridSpacing] = useState(10);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
   const polygonRef = useRef<google.maps.Polygon | null>(null);
   const markerRefsRef = useRef<Map<string, google.maps.Marker>>(new Map());
@@ -169,17 +185,28 @@ export function MapContainer({ address }: MapContainerProps) {
       const position = event.latLng;
       if (!position) return;
 
+      const { lat: snappedLat, lng: snappedLng, snapPoint: detectedSnap } = applySnapping(
+        position.lat(),
+        position.lng(),
+        vertices,
+        draggedVertex,
+        snapConfig,
+        mapInstanceRef.current.getZoom() || 12
+      );
+
+      setSnapPoint(detectedSnap);
+
       setVertices((prev) =>
         prev.map((v) =>
           v.id === draggedVertex
-            ? { ...v, lat: position.lat(), lng: position.lng() }
+            ? { ...v, lat: snappedLat, lng: snappedLng }
             : v
         )
       );
 
       const marker = markerRefsRef.current.get(draggedVertex);
       if (marker) {
-        marker.position = position;
+        marker.position = new google.maps.LatLng(snappedLat, snappedLng);
       }
 
       updateMeasurements([...vertices]);
@@ -194,7 +221,7 @@ export function MapContainer({ address }: MapContainerProps) {
       google.maps.event.clearListeners(mapInstanceRef.current, 'dblclick');
       google.maps.event.clearListeners(mapInstanceRef.current, 'mousemove');
     };
-  }, [isDrawing, draggedVertex, vertices]);
+  }, [isDrawing, draggedVertex, vertices, snapConfig]);
 
   useEffect(() => {
     if (!mapInstanceRef.current || vertices.length === 0) return;
@@ -338,6 +365,8 @@ export function MapContainer({ address }: MapContainerProps) {
     setIsDrawing(false);
     setDraggedVertex(null);
     setMeasurements(null);
+    setSnapPoint(null);
+    setGridVisible(false);
 
     markerRefsRef.current.forEach((marker) => marker.setMap(null));
     markerRefsRef.current.clear();
@@ -468,6 +497,32 @@ export function MapContainer({ address }: MapContainerProps) {
           unit={unit}
         />
       )}
+
+      <GridOverlay
+        mapInstance={mapInstanceRef.current}
+        spacing={gridSpacing}
+        visible={gridVisible}
+      />
+
+      {showPolygonUI && (
+        <div className="absolute top-4 right-4 z-10 space-y-3">
+          <GridControls
+            visible={gridVisible}
+            spacing={gridSpacing}
+            onVisibilityChange={setGridVisible}
+            onSpacingChange={setGridSpacing}
+          />
+          {isDrawing && (
+            <SnapTools
+              config={snapConfig}
+              onConfigChange={setSnapConfig}
+              isVisible={true}
+            />
+          )}
+        </div>
+      )}
+
+      <SnapIndicator snapPoint={snapPoint} />
 
       {error && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
