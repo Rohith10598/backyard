@@ -54,9 +54,9 @@ export function GridOverlay({ mapInstance, spacing, visible }: GridOverlayProps)
         path,
         map: mapInstance,
         geodesic: true,
-        strokeColor: '#888888',
-        strokeOpacity: 0.3,
-        strokeWeight: 1,
+        strokeColor: '#4a5568',
+        strokeOpacity: 0.6,
+        strokeWeight: 2,
         zIndex: 0,
       });
 
@@ -74,9 +74,9 @@ export function GridOverlay({ mapInstance, spacing, visible }: GridOverlayProps)
         path,
         map: mapInstance,
         geodesic: true,
-        strokeColor: '#888888',
-        strokeOpacity: 0.3,
-        strokeWeight: 1,
+        strokeColor: '#4a5568',
+        strokeOpacity: 0.6,
+        strokeWeight: 2,
         zIndex: 0,
       });
 
