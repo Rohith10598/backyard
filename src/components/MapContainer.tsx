@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X, MapPin, Maximize2 } from 'lucide-react';
+import { Plus, X, MapPin, Maximize2, Download } from 'lucide-react';
 import { PolygonDrawer } from './PolygonDrawer';
 import { MeasurementOverlay } from './MeasurementOverlay';
 import { NorthArrow } from './NorthArrow';
@@ -7,6 +7,7 @@ import { SnapTools } from './SnapTools';
 import { SnapIndicator } from './SnapIndicator';
 import { GridOverlay } from './GridOverlay';
 import { GridControls } from './GridControls';
+import { ExportDialog } from './ExportDialog';
 import type { Unit } from '../utils/geospatial';
 import type { SnapConfig, SnapPoint } from '../utils/snapping';
 import { applySnapping } from '../utils/snapping';
@@ -42,6 +43,7 @@ export function MapContainer({ address }: MapContainerProps) {
   const [snapPoint, setSnapPoint] = useState<SnapPoint | null>(null);
   const [gridVisible, setGridVisible] = useState(false);
   const [gridSpacing, setGridSpacing] = useState(10);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const polylineRef = useRef<google.maps.Polyline | null>(null);
   const polygonRef = useRef<google.maps.Polygon | null>(null);
   const markerRefsRef = useRef<Map<string, google.maps.Marker>>(new Map());
@@ -450,6 +452,16 @@ export function MapContainer({ address }: MapContainerProps) {
               Hide
             </button>
 
+            {vertices.length >= 3 && (
+              <button
+                onClick={() => setShowExportDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full justify-center"
+              >
+                <Download size={18} />
+                Export
+              </button>
+            )}
+
             <div className="border-t mt-2 pt-2">
               <div className="text-sm font-medium text-gray-700 mb-2">Units</div>
               <div className="flex gap-2">
@@ -528,6 +540,18 @@ export function MapContainer({ address }: MapContainerProps) {
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
           {error}
         </div>
+      )}
+
+      {measurements && (
+        <ExportDialog
+          isOpen={showExportDialog}
+          onClose={() => setShowExportDialog(false)}
+          vertices={vertices}
+          sideLengths={measurements.sideLengths}
+          perimeter={measurements.perimeter}
+          area={measurements.area}
+          unit={unit}
+        />
       )}
     </div>
   );
