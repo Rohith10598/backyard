@@ -8,9 +8,6 @@ interface GridOverlayProps {
 
 const EARTH_RADIUS_METERS = 6371000;
 
-const toRad = (deg: number) => (deg * Math.PI) / 180;
-const toDeg = (rad: number) => (rad * 180) / Math.PI;
-
 export function GridOverlay({ mapInstance, spacing, visible }: GridOverlayProps) {
   const polylineRefsRef = useRef<google.maps.Polyline[]>([]);
   const listenerRefsRef = useRef<google.maps.MapsEventListener[]>([]);

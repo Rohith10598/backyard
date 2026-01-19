@@ -49,7 +49,7 @@ export function AddressInput({ onSearch }: AddressInputProps) {
     try {
       const result = await autocompleteRef.current.getPlacePredictions({
         input: value,
-        sessionToken: sessionTokenRef.current,
+        sessionToken: sessionTokenRef.current || undefined,
         componentRestrictions: { country: 'us' },
       });
 

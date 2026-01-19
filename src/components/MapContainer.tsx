@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X, MapPin, Maximize2, Download } from 'lucide-react';
-import { PolygonDrawer } from './PolygonDrawer';
+import { Plus, X, MapPin, Download, Edit3 } from 'lucide-react';
 import { MeasurementOverlay } from './MeasurementOverlay';
 import { NorthArrow } from './NorthArrow';
-import { SnapTools } from './SnapTools';
-import { SnapIndicator } from './SnapIndicator';
 import { GridOverlay } from './GridOverlay';
 import { GridControls } from './GridControls';
 import { ExportDialog } from './ExportDialog';
 import type { Unit } from '../utils/geospatial';
-import type { SnapConfig, SnapPoint } from '../utils/snapping';
-import { applySnapping } from '../utils/snapping';
 
 interface MapContainerProps {
   address: string;
@@ -21,32 +16,23 @@ export function MapContainer({ address }: MapContainerProps) {
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
+  const drawingManagerRef = useRef<google.maps.drawing.DrawingManager | null>(null);
+  const polygonRef = useRef<google.maps.Polygon | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [unit, setUnit] = useState<Unit>('meters');
   const [showPolygonUI, setShowPolygonUI] = useState(false);
   const [vertices, setVertices] = useState<Array<{ lat: number; lng: number; id: string }>>([]);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [draggedVertex, setDraggedVertex] = useState<string | null>(null);
   const [measurements, setMeasurements] = useState<{
     perimeter: number;
     area: number;
     sideLengths: number[];
   } | null>(null);
-  const [snapConfig, setSnapConfig] = useState<SnapConfig>({
-    enabled: false,
-    distanceThreshold: 10,
-    angleSnapping: true,
-    gridSnapping: false,
-    vertexSnapping: true,
-  });
-  const [snapPoint, setSnapPoint] = useState<SnapPoint | null>(null);
   const [gridVisible, setGridVisible] = useState(false);
   const [gridSpacing, setGridSpacing] = useState(10);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const polylineRef = useRef<google.maps.Polyline | null>(null);
-  const polygonRef = useRef<google.maps.Polygon | null>(null);
-  const markerRefsRef = useRef<Map<string, google.maps.Marker>>(new Map());
 
   useEffect(() => {
     const initializeMap = async () => {
@@ -79,6 +65,9 @@ export function MapContainer({ address }: MapContainerProps) {
         });
 
         geocoderRef.current = new Geocoder();
+
+        await initializeDrawingManager();
+
         setIsLoading(false);
       } catch (err) {
         console.error('Error initializing map:', err);
@@ -107,7 +96,7 @@ export function MapContainer({ address }: MapContainerProps) {
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geocoding,places,marker,geometry,drawing`;
     script.async = true;
 
     const handleScriptLoad = () => {
@@ -123,6 +112,85 @@ export function MapContainer({ address }: MapContainerProps) {
 
     document.head.appendChild(script);
   }, []);
+
+  const initializeDrawingManager = async () => {
+    if (!mapInstanceRef.current) return;
+
+    try {
+      await google.maps.importLibrary('drawing');
+
+      drawingManagerRef.current = new google.maps.drawing.DrawingManager({
+        drawingMode: null,
+        drawingControl: false,
+        polygonOptions: {
+          fillColor: '#4f46e5',
+          fillOpacity: 0.2,
+          strokeColor: '#4f46e5',
+          strokeOpacity: 0.8,
+          strokeWeight: 2,
+          editable: true,
+          draggable: false,
+          geodesic: true,
+        },
+      });
+
+      drawingManagerRef.current.setMap(mapInstanceRef.current);
+
+      google.maps.event.addListener(
+        drawingManagerRef.current,
+        'polygoncomplete',
+        (polygon: google.maps.Polygon) => {
+          handlePolygonComplete(polygon);
+        }
+      );
+    } catch (err) {
+      console.error('Error initializing DrawingManager:', err);
+    }
+  };
+
+  const handlePolygonComplete = (polygon: google.maps.Polygon) => {
+    if (polygonRef.current) {
+      polygonRef.current.setMap(null);
+    }
+
+    polygonRef.current = polygon;
+    setIsDrawing(false);
+
+    if (drawingManagerRef.current) {
+      drawingManagerRef.current.setDrawingMode(null);
+    }
+
+    extractVerticesFromPolygon(polygon);
+
+    google.maps.event.addListener(polygon.getPath(), 'set_at', () => {
+      extractVerticesFromPolygon(polygon);
+    });
+
+    google.maps.event.addListener(polygon.getPath(), 'insert_at', () => {
+      extractVerticesFromPolygon(polygon);
+    });
+
+    google.maps.event.addListener(polygon.getPath(), 'remove_at', () => {
+      extractVerticesFromPolygon(polygon);
+    });
+  };
+
+  const extractVerticesFromPolygon = (polygon: google.maps.Polygon) => {
+    const path = polygon.getPath();
+    const newVertices = [];
+
+    for (let i = 0; i < path.getLength(); i++) {
+      const latLng = path.getAt(i);
+      newVertices.push({
+        lat: latLng.lat(),
+        lng: latLng.lng(),
+        id: `${i}`,
+      });
+    }
+
+    setVertices(newVertices);
+    updateMeasurements(newVertices);
+  };
 
   useEffect(() => {
     if (!address || !geocoderRef.current || !mapInstanceRef.current) return;
@@ -158,113 +226,6 @@ export function MapContainer({ address }: MapContainerProps) {
       }
     );
   }, [address]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || !isDrawing) return;
-
-    const handleMapClick = (event: google.maps.MapMouseEvent) => {
-      if (draggedVertex) return;
-
-      const newVertex = {
-        lat: event.latLng!.lat(),
-        lng: event.latLng!.lng(),
-        id: Date.now().toString(),
-      };
-
-      setVertices((prev) => [...prev, newVertex]);
-    };
-
-    const handleMapDoubleClick = (event: google.maps.MapMouseEvent) => {
-      event.preventDefault();
-      if (vertices.length >= 3) {
-        closePolygon();
-      }
-    };
-
-    const handleMouseMove = (event: google.maps.MapMouseEvent) => {
-      if (!draggedVertex || !mapInstanceRef.current) return;
-
-      const position = event.latLng;
-      if (!position) return;
-
-      const { lat: snappedLat, lng: snappedLng, snapPoint: detectedSnap } = applySnapping(
-        position.lat(),
-        position.lng(),
-        vertices,
-        draggedVertex,
-        snapConfig,
-        mapInstanceRef.current.getZoom() || 12
-      );
-
-      setSnapPoint(detectedSnap);
-
-      setVertices((prev) =>
-        prev.map((v) =>
-          v.id === draggedVertex
-            ? { ...v, lat: snappedLat, lng: snappedLng }
-            : v
-        )
-      );
-
-      const marker = markerRefsRef.current.get(draggedVertex);
-      if (marker) {
-        marker.position = new google.maps.LatLng(snappedLat, snappedLng);
-      }
-
-      updateMeasurements([...vertices]);
-    };
-
-    mapInstanceRef.current.addListener('click', handleMapClick);
-    mapInstanceRef.current.addListener('dblclick', handleMapDoubleClick);
-    mapInstanceRef.current.addListener('mousemove', handleMouseMove);
-
-    return () => {
-      google.maps.event.clearListeners(mapInstanceRef.current, 'click');
-      google.maps.event.clearListeners(mapInstanceRef.current, 'dblclick');
-      google.maps.event.clearListeners(mapInstanceRef.current, 'mousemove');
-    };
-  }, [isDrawing, draggedVertex, vertices, snapConfig]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || vertices.length === 0) return;
-
-    const path = vertices.map((v) => ({ lat: v.lat, lng: v.lng }));
-
-    if (vertices.length >= 2) {
-      if (!polylineRef.current) {
-        polylineRef.current = new google.maps.Polyline({
-          map: mapInstanceRef.current,
-          path,
-          geodesic: true,
-          strokeColor: '#4f46e5',
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          zIndex: 1,
-        });
-      } else {
-        polylineRef.current.setPath(path);
-      }
-    }
-
-    markerRefsRef.current.forEach((marker) => marker.setMap(null));
-    markerRefsRef.current.clear();
-
-    vertices.forEach((vertex) => {
-      const marker = new google.maps.Marker({
-        position: { lat: vertex.lat, lng: vertex.lng },
-        map: mapInstanceRef.current,
-        cursor: 'grab',
-        title: `Vertex`,
-      });
-
-      marker.addListener('mousedown', () => setDraggedVertex(vertex.id));
-      mapInstanceRef.current?.addListener('mouseup', () => setDraggedVertex(null));
-
-      markerRefsRef.current.set(vertex.id, marker);
-    });
-
-    updateMeasurements(vertices);
-  }, [vertices]);
 
   const { calculateDistance, calculatePerimeter, calculatePolygonArea } = (() => {
     const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -332,60 +293,30 @@ export function MapContainer({ address }: MapContainerProps) {
   const startDrawing = () => {
     clearPolygon();
     setIsDrawing(true);
-  };
 
-  const closePolygon = () => {
-    if (vertices.length < 3 || !mapInstanceRef.current) return;
-
-    setIsDrawing(false);
-    const path = vertices.map((v) => ({ lat: v.lat, lng: v.lng }));
-
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
+    if (drawingManagerRef.current) {
+      drawingManagerRef.current.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
     }
-
-    if (polygonRef.current) {
-      polygonRef.current.setMap(null);
-    }
-
-    polygonRef.current = new google.maps.Polygon({
-      map: mapInstanceRef.current,
-      path,
-      fillColor: '#4f46e5',
-      fillOpacity: 0.2,
-      strokeColor: '#4f46e5',
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
-      geodesic: true,
-      zIndex: 0,
-    });
   };
 
   const clearPolygon = () => {
     setVertices([]);
     setIsDrawing(false);
-    setDraggedVertex(null);
     setMeasurements(null);
-    setSnapPoint(null);
     setGridVisible(false);
-
-    markerRefsRef.current.forEach((marker) => marker.setMap(null));
-    markerRefsRef.current.clear();
 
     if (markerRef.current) {
       markerRef.current.setMap(null);
       markerRef.current = null;
     }
 
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
-
     if (polygonRef.current) {
       polygonRef.current.setMap(null);
       polygonRef.current = null;
+    }
+
+    if (drawingManagerRef.current) {
+      drawingManagerRef.current.setDrawingMode(null);
     }
   };
 
@@ -405,14 +336,14 @@ export function MapContainer({ address }: MapContainerProps) {
         {!showPolygonUI ? (
           <button
             onClick={() => setShowPolygonUI(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <MapPin size={18} />
             Draw Polygon
           </button>
         ) : (
           <div className="flex flex-col gap-2">
-            {!isDrawing ? (
+            {!isDrawing && vertices.length === 0 ? (
               <button
                 onClick={startDrawing}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -420,30 +351,28 @@ export function MapContainer({ address }: MapContainerProps) {
                 <Plus size={18} />
                 Start Drawing
               </button>
+            ) : isDrawing ? (
+              <div className="text-sm font-medium text-gray-700 px-4 py-2 bg-green-50 rounded border border-green-200">
+                Draw polygon by clicking and dragging on the map
+              </div>
             ) : (
-              <>
-                <div className="text-sm font-medium text-gray-700 px-4 py-2">
-                  {vertices.length} vertices • Double-click to finish
-                </div>
-                {vertices.length >= 3 && (
-                  <button
-                    onClick={closePolygon}
-                    className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm"
-                  >
-                    <Maximize2 size={16} />
-                    Close Polygon
-                  </button>
-                )}
-              </>
+              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded border border-blue-200">
+                <Edit3 size={16} className="text-blue-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  Edit mode: Drag vertices to adjust
+                </span>
+              </div>
             )}
 
-            <button
-              onClick={clearPolygon}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <X size={18} />
-              Clear All
-            </button>
+            {vertices.length > 0 && (
+              <button
+                onClick={clearPolygon}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <X size={18} />
+                Clear Polygon
+              </button>
+            )}
 
             <button
               onClick={() => setShowPolygonUI(false)}
@@ -469,7 +398,7 @@ export function MapContainer({ address }: MapContainerProps) {
                   onClick={() => setUnit('meters')}
                   className={`flex-1 px-2 py-1 rounded text-sm font-medium transition-colors ${
                     unit === 'meters'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
@@ -479,7 +408,7 @@ export function MapContainer({ address }: MapContainerProps) {
                   onClick={() => setUnit('feet')}
                   className={`flex-1 px-2 py-1 rounded text-sm font-medium transition-colors ${
                     unit === 'feet'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
@@ -489,7 +418,7 @@ export function MapContainer({ address }: MapContainerProps) {
                   onClick={() => setUnit('inches')}
                   className={`flex-1 px-2 py-1 rounded text-sm font-medium transition-colors ${
                     unit === 'inches'
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
@@ -524,17 +453,8 @@ export function MapContainer({ address }: MapContainerProps) {
             onVisibilityChange={setGridVisible}
             onSpacingChange={setGridSpacing}
           />
-          {isDrawing && (
-            <SnapTools
-              config={snapConfig}
-              onConfigChange={setSnapConfig}
-              isVisible={true}
-            />
-          )}
         </div>
       )}
-
-      <SnapIndicator snapPoint={snapPoint} />
 
       {error && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
