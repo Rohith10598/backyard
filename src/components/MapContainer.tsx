@@ -5,7 +5,10 @@ import { NorthArrow } from './NorthArrow';
 import { GridOverlay } from './GridOverlay';
 import { GridControls } from './GridControls';
 import { ExportDialog } from './ExportDialog';
+import { EdgeOverlay } from './EdgeOverlay';
+import { EdgeDetectionControls } from './EdgeDetectionControls';
 import type { Unit } from '../utils/geospatial';
+import { edgeSnapManager, type EdgeDetectionConfig } from '../utils/edgeSnapping';
 
 interface MapContainerProps {
   address: string;
@@ -33,6 +36,13 @@ export function MapContainer({ address }: MapContainerProps) {
   const [gridVisible, setGridVisible] = useState(false);
   const [gridSpacing, setGridSpacing] = useState(10);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [edgeSnappingEnabled, setEdgeSnappingEnabled] = useState(true);
+  const [edgeOverlayVisible, setEdgeOverlayVisible] = useState(false);
+  const [edgeDetectionConfig, setEdgeDetectionConfig] = useState<Partial<EdgeDetectionConfig>>({
+    sensitivity: 0.6,
+    contrastThreshold: 30,
+    maxDistance: 30,
+  });
 
   useEffect(() => {
     const initializeMap = async () => {
@@ -160,6 +170,10 @@ export function MapContainer({ address }: MapContainerProps) {
       drawingManagerRef.current.setDrawingMode(null);
     }
 
+    if (mapInstanceRef.current && edgeSnappingEnabled) {
+      edgeSnapManager.analyzeMapRegion(mapInstanceRef.current);
+    }
+
     extractVerticesFromPolygon(polygon);
 
     google.maps.event.addListener(polygon.getPath(), 'set_at', () => {
@@ -180,7 +194,16 @@ export function MapContainer({ address }: MapContainerProps) {
     const newVertices = [];
 
     for (let i = 0; i < path.getLength(); i++) {
-      const latLng = path.getAt(i);
+      let latLng = path.getAt(i);
+
+      if (edgeSnappingEnabled && edgeSnapManager.getEdgeCount() > 0) {
+        const snapResult = edgeSnapManager.snapVertexToEdge(latLng, edgeDetectionConfig);
+        if (snapResult.snapped) {
+          latLng = new google.maps.LatLng(snapResult.lat, snapResult.lng);
+          path.setAt(i, latLng);
+        }
+      }
+
       newVertices.push({
         lat: latLng.lat(),
         lng: latLng.lng(),
@@ -304,6 +327,8 @@ export function MapContainer({ address }: MapContainerProps) {
     setIsDrawing(false);
     setMeasurements(null);
     setGridVisible(false);
+    edgeSnapManager.clearEdges();
+    setEdgeOverlayVisible(false);
 
     if (markerRef.current) {
       markerRef.current.setMap(null);
@@ -453,8 +478,20 @@ export function MapContainer({ address }: MapContainerProps) {
             onVisibilityChange={setGridVisible}
             onSpacingChange={setGridSpacing}
           />
+          {vertices.length > 0 && (
+            <EdgeDetectionControls
+              enabled={edgeSnappingEnabled}
+              overlayVisible={edgeOverlayVisible}
+              config={edgeDetectionConfig}
+              onEnabledChange={setEdgeSnappingEnabled}
+              onOverlayVisibilityChange={setEdgeOverlayVisible}
+              onConfigChange={setEdgeDetectionConfig}
+            />
+          )}
         </div>
       )}
+
+      <EdgeOverlay mapInstance={mapInstanceRef.current} visible={edgeOverlayVisible} />
 
       {error && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
